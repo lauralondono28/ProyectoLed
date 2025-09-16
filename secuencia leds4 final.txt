@@ -1,0 +1,254 @@
+#include <xc.inc>   ; Incluir definiciones del ensamblador para PIC18F4550
+
+    ; Configuración de bits de configuración (Fuses)
+    CONFIG  FOSC = INTOSCIO_EC   ; Usa el oscilador interno a 8 MHz
+    CONFIG  WDT = OFF            ; Deshabilitar el Watchdog Timer
+    CONFIG  LVP = OFF            ; Deshabilitar la programación en bajo voltaje
+    CONFIG  PBADEN = OFF         ; Configurar los pines de PORTB como digitales
+
+    ;===============================================
+    ; Vectores de Inicio
+    ;===============================================
+
+    PSECT  resetVec, class=CODE, reloc=2  ; Sección para el vector de reinicio
+    ORG     0x00                          ; Dirección de inicio
+    GOTO    Inicio                         ; Saltar a la rutina de inicio
+
+    ;===============================================
+    ; Código Principal
+    ;===============================================
+    
+    PSECT  main_code, class=CODE, reloc=2  ; Sección de código principal
+
+Inicio:
+    ; Configurar oscilador interno a 4MHz
+    MOVLW   0b01100010   ; Configurar OSCCON para 4MHz (0x72 en binario)
+    MOVWF   OSCCON       ; IRCF2=1, IRCF1=1, IRCF0=0 -> 8MHz
+    
+    ; Configurar puertos
+    CLRF    TRISB        ; PORTB como salida (LEDs)
+    CLRF    LATB         ; Apagar todos los LEDs
+    
+    MOVLW   0b00010000   ; Configurar RA4 como entrada (pulsador)
+    MOVWF   TRISA        ; TRISA4 = 1 (entrada), otros como salida
+    
+    CLRF    SecuenciaActual ; Inicializar variable de secuencia
+
+MainLoop:
+    ; Verificar si el pulsador está presionado
+    BTFSS   PORTA, 4     ; Saltar si RA4 está en alto (pulsador no presionado)
+    CALL    CambiarSecuencia ; Si está presionado, cambiar secuencia
+    
+    ; Ejecutar la secuencia actual
+    MOVF    SecuenciaActual, W ; Cargar número de secuencia actual
+    BNZ     Secuencia1    ; Si no es 0, saltar a secuencia 1
+    
+    ; Secuencia 0: Desplazamiento simple
+    CALL    SecuenciaDesplazamiento
+    GOTO    MainLoop
+    
+Secuencia1:
+    DECF    WREG, W      ; Decrementar W
+    BNZ     Secuencia2   ; Si no es 0, saltar a secuencia 2
+    
+    ; Secuencia 1: Carrera de LEDs
+    CALL    SecuenciaCarrera
+    GOTO    MainLoop
+    
+Secuencia2:
+    DECF    WREG, W      ; Decrementar W
+    BNZ     Secuencia3   ; Si no es 0, saltar a secuencia 3
+    
+    ; Secuencia 2: Binario ascendente
+    CALL    SecuenciaBinario
+    GOTO    MainLoop
+    
+Secuencia3:
+    ; Secuencia 3: Alternancia de pares
+    CALL    SecuenciaAlternancia
+    GOTO    MainLoop
+
+;===============================================
+; Subrutina para cambiar de secuencia
+;===============================================
+CambiarSecuencia:
+    CALL    Retardo_200ms ; Anti-rebote
+    BTFSC   PORTA, 4     ; Verificar si aún está presionado
+    RETURN               ; Si no, retornar
+    
+    ; Incrementar secuencia (0-3)
+    INCF    SecuenciaActual, F
+    MOVLW   4            ; Máximo 4 secuencias (0-3)
+    SUBWF   SecuenciaActual, W
+    BNZ     FinCambio    ; Si no es 4, continuar
+    CLRF    SecuenciaActual ; Si es 4, volver a 0
+    
+FinCambio:
+    CLRF    LATB         ; Apagar todos los LEDs
+    CALL    Retardo_500ms ; Pequeña pausa visual
+    RETURN
+
+;===============================================
+; Secuencia 0: Desplazamiento simple
+;===============================================
+SecuenciaDesplazamiento:
+    MOVLW   0b00000001   ; Empezar con RB0 encendido
+    MOVWF   LATB
+    CALL    Retardo_1s
+    
+    MOVLW   0b00000010   ; RB1 encendido
+    MOVWF   LATB
+    CALL    Retardo_1s
+    
+    MOVLW   0b00000100   ; RB2 encendido
+    MOVWF   LATB
+    CALL    Retardo_1s
+    
+    MOVLW   0b00001000   ; RB3 encendido
+    MOVWF   LATB
+    CALL    Retardo_1s
+    
+    RETURN
+
+;===============================================
+; Secuencia 1: Carrera de LEDs
+;===============================================
+SecuenciaCarrera:
+    MOVLW   0b00001111   ; RB0 y RB1 encendidos
+    MOVWF   LATB
+    CALL    Retardo_1s
+    
+    MOVLW   0b00000000   ; RB1 y RB2 encendidos
+    MOVWF   LATB
+    CALL    Retardo_1s
+    
+    MOVLW   0b00001111   ; RB2 y RB3 encendidos
+    MOVWF   LATB
+    CALL    Retardo_1s
+    
+    MOVLW   0b00000000   ; RB3 y RB0 encendidos
+    MOVWF   LATB
+    CALL    Retardo_1s
+    
+    RETURN
+
+;===============================================
+; Secuencia 2: Contador binario
+;===============================================
+SecuenciaBinario:
+    MOVLW   0b00001111   
+    MOVWF   LATB
+    CALL    Retardo_1s
+    
+    MOVLW   0b00000000  
+    MOVWF   LATB
+    CALL    Retardo_1s
+    
+    MOVLW   0b00001110   
+    MOVWF   LATB
+    CALL    Retardo_1s
+    
+    MOVLW   0b00000000   
+    MOVWF   LATB
+    CALL    Retardo_1s
+    
+    MOVLW   0b00001100   
+    MOVWF   LATB
+    CALL    Retardo_1s
+    
+    MOVLW   0b00000000   
+    MOVWF   LATB
+    CALL    Retardo_1s
+    
+    RETURN
+
+;===============================================
+; Secuencia 3: Alternancia de pares
+;===============================================
+SecuenciaAlternancia:
+    MOVLW   0b00000101   ; RB0 y RB2 encendidos (0101)
+    MOVWF   LATB
+    CALL    Retardo_1s
+    
+    MOVLW   0b00001010   ; RB1 y RB3 encendidos (1010)
+    MOVWF   LATB
+    CALL    Retardo_1s
+    
+    RETURN
+
+;===============================================
+; Subrutinas de Retardo AJUSTADAS
+;===============================================
+Retardo_1s:
+    MOVLW   0b10011011   ; 155 decimal - contador externo
+    MOVWF   ContadorExterno
+LoopExterno1s:
+    MOVLW   0b11111010   ; 250 decimal - contador interno
+    MOVWF   ContadorInterno
+LoopInterno1s:
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    DECFSZ  ContadorInterno, F
+    GOTO    LoopInterno1s
+    DECFSZ  ContadorExterno, F
+    GOTO    LoopExterno1s
+    RETURN
+
+Retardo_500ms:
+    MOVLW   0b01001100   ; 76 decimal - contador externo
+    MOVWF   ContadorExterno
+LoopExterno500ms:
+    MOVLW   0b11111010   ; 250 decimal - contador interno
+    MOVWF   ContadorInterno
+LoopInterno500ms:
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    DECFSZ  ContadorInterno, F
+    GOTO    LoopInterno500ms
+    DECFSZ  ContadorExterno, F
+    GOTO    LoopExterno500ms
+    RETURN
+
+Retardo_200ms:
+    MOVLW   0b00110010   ; 50 decimal - contador externo
+    MOVWF   ContadorExterno
+LoopExterno200ms:
+    MOVLW   0b11111010   ; 250 decimal - contador interno
+    MOVWF   ContadorInterno
+LoopInterno200ms:
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    DECFSZ  ContadorInterno, F
+    GOTO    LoopInterno200ms
+    DECFSZ  ContadorExterno, F
+    GOTO    LoopExterno200ms
+    RETURN
+
+;===============================================
+; Definición de Variables
+;===============================================
+
+    PSECT udata  ; Sección de datos sin inicializar (variables en RAM)
+ContadorExterno:   DS 1   ; Reserva 1 byte para contador externo
+ContadorInterno:   DS 1   ; Reserva 1 byte para contador interno
+SecuenciaActual:   DS 1   ; Reserva 1 byte para secuencia actual (0-3)
+
+    END
